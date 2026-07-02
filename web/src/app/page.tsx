@@ -91,6 +91,17 @@ export default function Home() {
     }
   };
 
+  const getPlatform = (url: string) => {
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.hostname.includes('youtube.com') || urlObj.hostname.includes('youtu.be')) return 'YouTube';
+      if (urlObj.hostname.includes('twitter.com') || urlObj.hostname.includes('x.com')) return 'X (Twitter)';
+      return 'Link';
+    } catch {
+      return 'Link';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans flex flex-col md:flex-row">
       
@@ -176,12 +187,17 @@ export default function Home() {
                   </a>
                   
                   <div className="p-6 flex-grow flex flex-col">
-                    <h3 className="text-lg font-bold mb-3 line-clamp-2 leading-snug">
+                    <h3 className="text-lg font-bold mb-2 line-clamp-2 leading-snug text-gray-100 group-hover:text-blue-400 transition-colors">
                       {link.title || link.url}
                     </h3>
-                    <div className="flex items-center gap-2 mb-5">
+                    {link.description && (
+                      <p className="text-sm text-gray-400 mb-4 line-clamp-3 leading-relaxed whitespace-pre-wrap">
+                        {link.description}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mb-5 mt-auto">
                       <span className="inline-block px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-semibold rounded-md border border-blue-500/20">
-                        {link.platform || 'Link'}
+                        {getPlatform(link.url)}
                       </span>
                       {link.categories?.name && (
                          <span className="inline-block px-2.5 py-1 bg-purple-500/10 text-purple-400 text-xs font-semibold rounded-md border border-purple-500/20">
