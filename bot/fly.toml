@@ -1,4 +1,4 @@
-app = "fan-archive-bot"
+app = "data-archive-tools"
 primary_region = "nrt"
 
 [build]
