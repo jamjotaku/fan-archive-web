@@ -132,6 +132,9 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
                 if (catData) catName = catData.name;
             }
             await interaction.editReply(`✅ **${catName}** フォルダにアーカイブを保存しました！\nURL: ${url}`);
+            
+            // 非同期でメタデータ取得を開始
+            fetchAndSaveMetadata(link.id, url).catch(console.error);
         }
     }
 });
@@ -145,6 +148,65 @@ function parseTimeToSeconds(text: string): number | null {
         return hours * 3600 + minutes * 60 + seconds;
     }
     return null;
+}
+
+async function fetchAndSaveMetadata(linkId: string, url: string) {
+    try {
+        let title = null;
+        let description = null;
+        let imageUrl = null;
+
+        const urlObj = new URL(url);
+        
+        if (urlObj.hostname.includes('youtube.com') || urlObj.hostname.includes('youtu.be')) {
+            const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+            const res = await fetch(oembedUrl);
+            if (res.ok) {
+                const data = await res.json();
+                title = data.title;
+                description = data.author_name;
+                imageUrl = data.thumbnail_url;
+            }
+        } else if (urlObj.hostname.includes('twitter.com') || urlObj.hostname.includes('x.com')) {
+            const pathParts = urlObj.pathname.split('/');
+            const statusIndex = pathParts.indexOf('status');
+            if (statusIndex !== -1 && pathParts.length > statusIndex + 1) {
+                const tweetId = pathParts[statusIndex + 1];
+                const fxtwitterUrl = `https://api.fxtwitter.com/Twitter/status/${tweetId}`;
+                const res = await fetch(fxtwitterUrl);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.code === 200 && data.tweet) {
+                        title = `${data.tweet.author.name} (@${data.tweet.author.screen_name})`;
+                        description = data.tweet.text;
+                        if (data.tweet.media && data.tweet.media.photos && data.tweet.media.photos.length > 0) {
+                            imageUrl = data.tweet.media.photos[0].url;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (title || description) {
+            await supabase.from('links').update({
+                title: title,
+                description: description,
+                image_url: imageUrl,
+                metadata_status: 'success'
+            }).eq('id', linkId);
+            console.log(`Metadata updated for link ${linkId}: ${title}`);
+        } else {
+            await supabase.from('links').update({
+                metadata_status: 'failed'
+            }).eq('id', linkId);
+            console.log(`Failed to fetch metadata for ${url}`);
+        }
+    } catch (err) {
+        console.error(`Error fetching metadata for ${url}:`, err);
+        await supabase.from('links').update({
+            metadata_status: 'failed'
+        }).eq('id', linkId);
+    }
 }
 
 client.login(process.env.DISCORD_TOKEN);
