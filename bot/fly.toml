@@ -1,0 +1,10 @@
+app = "fan-archive-bot"
+primary_region = "nrt"
+
+[build]
+
+[processes]
+  app = "node dist/bot.js"
+
+# BotはHTTPリクエストを受け付けないバックグラウンドワーカーのため、
+# http_service ブロックは設定しません。
