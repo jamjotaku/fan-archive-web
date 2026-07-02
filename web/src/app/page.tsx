@@ -181,7 +181,7 @@ export default function Home() {
               </button>
             </li>
             {categories.map((cat) => (
-              <li key={cat.id} className="relative group/cat">
+              <li key={cat.id} className={`relative group/cat ${openDropdown === \`cat-\${cat.id}\` ? 'z-50' : 'z-10'}`}>
                 <button 
                   onClick={() => { setSelectedCategory(cat.id); setPage(1); }}
                   className={`w-full text-left px-4 py-2.5 rounded-xl transition-all font-medium truncate pr-10 ${selectedCategory === cat.id ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200 border border-transparent'}`}
