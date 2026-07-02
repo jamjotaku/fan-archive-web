@@ -4,6 +4,9 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
+console.log("Bot process started. Node version:", process.version);
+console.log("ENV VARS: SUPABASE_URL=", !!process.env.SUPABASE_URL, "DISCORD_TOKEN=", !!process.env.DISCORD_TOKEN);
+
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
 const client = new Client({
