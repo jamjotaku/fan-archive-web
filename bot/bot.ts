@@ -28,9 +28,9 @@ client.on(Events.ClientReady, async () => {
                 .setRequired(true))
         .addStringOption(option =>
             option.setName('folder')
-                .setDescription('保存先のフォルダ（Webで作ったものが選べます）')
+                .setDescription('保存先のフォルダ（省略可。Webで作ったものが選べます）')
                 .setAutocomplete(true)
-                .setRequired(true))
+                .setRequired(false))
         .addStringOption(option =>
             option.setName('note')
                 .setDescription('メモやタイムスタンプ（例: 1:23:45 このシーン）')
@@ -65,7 +65,7 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
 
     if (interaction.commandName === 'archive') {
         const url = interaction.options.getString('url', true);
-        const categoryId = interaction.options.getString('folder', true);
+        const categoryId = interaction.options.getString('folder');
         const note = interaction.options.getString('note') || '';
 
         // ドメイン検証
@@ -90,6 +90,12 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
             community = newCommunity;
         }
 
+        // categoryIdが正しいUUID形式かチェック（ユーザーが自由入力した場合の対策）
+        let validCategoryId = null;
+        if (categoryId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(categoryId)) {
+            validCategoryId = categoryId;
+        }
+
         // リンク登録 (Upsert)
         let { data: link, error: linkError } = await supabase
             .from('links')
@@ -97,7 +103,7 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
                 community_id: community!.id,
                 url: url,
                 added_by_user_id: interaction.user.id,
-                category_id: categoryId,
+                category_id: validCategoryId,
                 metadata_status: 'pending'
             }, { onConflict: 'community_id, url' })
             .select().single();
@@ -120,8 +126,11 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
             await interaction.editReply('❌ タイムスタンプの保存に失敗しました。');
         } else {
             // カテゴリ名を取得して返信に含める
-            const { data: catData } = await supabase.from('categories').select('name').eq('id', categoryId).single();
-            const catName = catData ? catData.name : 'Unknown';
+            let catName = '未分類';
+            if (validCategoryId) {
+                const { data: catData } = await supabase.from('categories').select('name').eq('id', validCategoryId).single();
+                if (catData) catName = catData.name;
+            }
             await interaction.editReply(`✅ **${catName}** フォルダにアーカイブを保存しました！\nURL: ${url}`);
         }
     }
