@@ -11,9 +11,15 @@ export default function Home() {
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryIcon, setNewCategoryIcon] = useState('');
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  
+  // Category Editing State
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState('');
+  const [editCategoryIcon, setEditCategoryIcon] = useState('');
 
   const limit = 20;
 
@@ -42,7 +48,7 @@ export default function Home() {
 
     let query = supabase
       .from('links')
-      .select('*, timestamps(*), categories(name)')
+      .select('*, timestamps(*), categories(name, icon)')
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -59,7 +65,6 @@ export default function Home() {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
     
-    // コミュニティを一つ取得（個人利用想定のため）
     const { data: community } = await supabase.from('communities').select('id').limit(1).single();
     if (!community) {
         alert("Discordコミュニティが見つかりません。先にBotを使ってリンクを1つ保存してください。");
@@ -68,7 +73,7 @@ export default function Home() {
 
     const { data, error } = await supabase
       .from('categories')
-      .insert({ community_id: community.id, name: newCategoryName.trim() })
+      .insert({ community_id: community.id, name: newCategoryName.trim(), icon: newCategoryIcon.trim() || '📁' })
       .select().single();
 
     if (error) {
@@ -76,6 +81,43 @@ export default function Home() {
     } else if (data) {
       setCategories([...categories, data].sort((a, b) => a.name.localeCompare(b.name)));
       setNewCategoryName('');
+      setNewCategoryIcon('');
+    }
+  };
+
+  const handleUpdateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory || !editCategoryName.trim()) return;
+
+    const { error } = await supabase
+      .from('categories')
+      .update({ name: editCategoryName.trim(), icon: editCategoryIcon.trim() || '📁' })
+      .eq('id', editingCategory);
+
+    if (error) {
+      alert("更新エラー: " + error.message);
+    } else {
+      setCategories(categories.map(c => c.id === editingCategory ? { ...c, name: editCategoryName.trim(), icon: editCategoryIcon.trim() || '📁' } : c));
+      setEditingCategory(null);
+      fetchLinks(); // リンク側の表示も更新
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!confirm("本当にこのフォルダを削除しますか？\n※中に入っているアーカイブは「未分類」に移動します。")) return;
+    
+    // リンクを未分類に移動
+    await supabase.from('links').update({ category_id: null }).eq('category_id', categoryId);
+    
+    // カテゴリを削除
+    const { error } = await supabase.from('categories').delete().eq('id', categoryId);
+    
+    if (error) {
+      alert("削除エラー: " + error.message);
+    } else {
+      setCategories(categories.filter(c => c.id !== categoryId));
+      if (selectedCategory === categoryId) setSelectedCategory(null);
+      fetchLinks();
     }
   };
 
@@ -90,7 +132,7 @@ export default function Home() {
   const handleMoveCategory = async (linkId: string, newCategoryId: string | null) => {
     const { error } = await supabase.from('links').update({ category_id: newCategoryId }).eq('id', linkId);
     if (error) alert("移動エラー: " + error.message);
-    else fetchLinks(); // 簡易的に再取得
+    else fetchLinks();
     setOpenDropdown(null);
   };
 
@@ -122,7 +164,7 @@ export default function Home() {
     <div className="min-h-screen bg-gray-900 text-white font-sans flex flex-col md:flex-row">
       
       {/* サイドバー（フォルダ一覧） */}
-      <aside className="w-full md:w-72 bg-gray-950 p-6 border-r border-gray-800 shrink-0 flex flex-col h-auto md:h-screen md:sticky top-0 z-10">
+      <aside className="w-full md:w-80 bg-gray-950 p-6 border-r border-gray-800 shrink-0 flex flex-col h-auto md:h-screen md:sticky top-0 z-10" onClick={() => setOpenDropdown(null)}>
         <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 mb-8 tracking-wide">
           FanArchive
         </h1>
@@ -135,17 +177,32 @@ export default function Home() {
                 onClick={() => { setSelectedCategory(null); setPage(1); }}
                 className={`w-full text-left px-4 py-2.5 rounded-xl transition-all font-medium ${selectedCategory === null ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200 border border-transparent'}`}
               >
-                📁 All Archives
+                🗂️ All Archives
               </button>
             </li>
             {categories.map((cat) => (
-              <li key={cat.id}>
+              <li key={cat.id} className="relative group/cat">
                 <button 
                   onClick={() => { setSelectedCategory(cat.id); setPage(1); }}
-                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all font-medium truncate ${selectedCategory === cat.id ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200 border border-transparent'}`}
+                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all font-medium truncate pr-10 ${selectedCategory === cat.id ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200 border border-transparent'}`}
                 >
-                  📁 {cat.name}
+                  {cat.icon || '📁'} {cat.name}
                 </button>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/cat:opacity-100 transition-opacity">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setOpenDropdown(openDropdown === `cat-${cat.id}` ? null : `cat-${cat.id}`); }}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300"
+                  >
+                    ⋮
+                  </button>
+                  {openDropdown === `cat-${cat.id}` && (
+                    <div className="absolute right-0 mt-1 w-32 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden py-1 z-30" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => { setEditingCategory(cat.id); setEditCategoryName(cat.name); setEditCategoryIcon(cat.icon || '📁'); setOpenDropdown(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm transition-colors">✏️ 編集</button>
+                      <div className="h-px bg-gray-700 my-1"></div>
+                      <button onClick={() => { handleDeleteCategory(cat.id); setOpenDropdown(null); }} className="w-full text-left px-4 py-2 hover:bg-red-500/20 text-red-400 text-sm font-semibold transition-colors">🗑️ 削除</button>
+                    </div>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -157,12 +214,20 @@ export default function Home() {
             <div className="flex gap-2 relative">
               <input 
                 type="text" 
+                value={newCategoryIcon}
+                onChange={(e) => setNewCategoryIcon(e.target.value)}
+                placeholder="📁" 
+                maxLength={2}
+                className="w-12 bg-gray-900 border border-gray-700 rounded-lg px-2 py-2.5 text-center text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-gray-600"
+              />
+              <input 
+                type="text" 
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
                 placeholder="Name (e.g. Vtuber-A)" 
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-gray-600"
+                className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-gray-600"
               />
-              <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-500/20">
+              <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-500/20">
                 Add
               </button>
             </div>
@@ -173,8 +238,13 @@ export default function Home() {
       {/* メインコンテンツ（アーカイブ一覧） */}
       <main className="flex-1 p-6 md:p-10 overflow-y-auto" onClick={() => setOpenDropdown(null)}>
         <header className="mb-10 flex items-center justify-between border-b border-gray-800 pb-6">
-          <h2 className="text-3xl font-bold tracking-tight">
-            {selectedCategory ? categories.find(c => c.id === selectedCategory)?.name : 'All Archives'}
+          <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            {selectedCategory ? (
+              <>
+                <span>{categories.find(c => c.id === selectedCategory)?.icon || '📁'}</span>
+                <span>{categories.find(c => c.id === selectedCategory)?.name}</span>
+              </>
+            ) : '🗂️ All Archives'}
           </h2>
         </header>
 
@@ -205,9 +275,9 @@ export default function Home() {
                       {openDropdown === link.id && (
                         <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden py-1 z-30" onClick={(e) => e.stopPropagation()}>
                           <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Move to...</div>
-                          <button onClick={() => handleMoveCategory(link.id, null)} className="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm transition-colors">📁 未分類 (All)</button>
+                          <button onClick={() => handleMoveCategory(link.id, null)} className="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm transition-colors">🗂️ 未分類 (All)</button>
                           {categories.map(cat => (
-                            <button key={cat.id} onClick={() => handleMoveCategory(link.id, cat.id)} className="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm transition-colors">📁 {cat.name}</button>
+                            <button key={cat.id} onClick={() => handleMoveCategory(link.id, cat.id)} className="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm transition-colors truncate">{cat.icon || '📁'} {cat.name}</button>
                           ))}
                           <div className="h-px bg-gray-700 my-1"></div>
                           <button onClick={() => handleDelete(link.id)} className="w-full text-left px-4 py-2 hover:bg-red-500/20 text-red-400 text-sm font-semibold transition-colors">🗑️ Delete</button>
@@ -258,7 +328,7 @@ export default function Home() {
                         </span>
                         {link.categories?.name && (
                            <span className="inline-block px-2.5 py-1 bg-purple-500/10 text-purple-400 text-xs font-semibold rounded-md border border-purple-500/20">
-                             📁 {link.categories.name}
+                             {link.categories.icon || '📁'} {link.categories.name}
                            </span>
                         )}
                       </div>
@@ -316,6 +386,47 @@ export default function Home() {
           </>
         )}
       </main>
+
+      {/* カテゴリ編集モーダル */}
+      {editingCategory && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEditingCategory(null)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-4">フォルダの編集</h3>
+            <form onSubmit={handleUpdateCategory} className="flex flex-col gap-4">
+              <div className="flex gap-2">
+                <div className="flex-shrink-0">
+                  <label className="block text-xs text-gray-500 mb-1">Icon</label>
+                  <input 
+                    type="text" 
+                    value={editCategoryIcon}
+                    onChange={e => setEditCategoryIcon(e.target.value)}
+                    maxLength={2}
+                    className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-center focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex-grow">
+                  <label className="block text-xs text-gray-500 mb-1">Name</label>
+                  <input 
+                    type="text" 
+                    value={editCategoryName}
+                    onChange={e => setEditCategoryName(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button type="button" onClick={() => setEditingCategory(null)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800">
+                  Cancel
+                </button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold shadow-lg shadow-blue-500/20">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
