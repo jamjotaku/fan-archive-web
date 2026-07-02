@@ -188,13 +188,18 @@ async function fetchAndSaveMetadata(linkId: string, url: string) {
         }
 
         if (title || description) {
-            await supabase.from('links').update({
+            const { error } = await supabase.from('links').update({
                 title: title,
                 description: description,
-                image_url: imageUrl,
+                thumbnail_url: imageUrl,
                 metadata_status: 'success'
             }).eq('id', linkId);
-            console.log(`Metadata updated for link ${linkId}: ${title}`);
+            
+            if (error) {
+                console.error("Supabase update error:", error);
+            } else {
+                console.log(`Metadata updated for link ${linkId}: ${title}`);
+            }
         } else {
             await supabase.from('links').update({
                 metadata_status: 'failed'
